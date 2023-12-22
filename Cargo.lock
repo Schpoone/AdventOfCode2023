@@ -49,7 +49,7 @@ name = "day10"
 version = "0.1.0"
 dependencies = [
  "colored",
- "glam",
+ "glam 0.24.2",
  "nom",
 ]
 
@@ -57,7 +57,7 @@ dependencies = [
 name = "day11"
 version = "0.1.0"
 dependencies = [
- "glam",
+ "glam 0.24.2",
  "nom",
 ]
 
@@ -73,7 +73,7 @@ dependencies = [
 name = "day13"
 version = "0.1.0"
 dependencies = [
- "glam",
+ "glam 0.24.2",
  "grid",
  "nom",
 ]
@@ -99,7 +99,7 @@ dependencies = [
 name = "day16"
 version = "0.1.0"
 dependencies = [
- "glam",
+ "glam 0.24.2",
  "nom",
 ]
 
@@ -107,7 +107,7 @@ dependencies = [
 name = "day17"
 version = "0.1.0"
 dependencies = [
- "glam",
+ "glam 0.24.2",
  "nom",
  "pathfinding",
 ]
@@ -116,7 +116,7 @@ dependencies = [
 name = "day18"
 version = "0.1.0"
 dependencies = [
- "glam",
+ "glam 0.24.2",
  "grid",
  "nom",
 ]
@@ -142,6 +142,26 @@ dependencies = [
  "nom",
  "num",
  "petgraph",
+]
+
+[[package]]
+name = "day21"
+version = "0.1.0"
+dependencies = [
+ "colored",
+ "glam 0.25.0",
+ "indicatif",
+ "itertools",
+ "nom",
+]
+
+[[package]]
+name = "day22"
+version = "0.1.0"
+dependencies = [
+ "glam 0.25.0",
+ "itertools",
+ "nom",
 ]
 
 [[package]]
@@ -236,6 +256,12 @@ name = "glam"
 version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5418c17512bdf42730f9032c74e1ae39afc408745ebb2acf72fbc4691c17945"
+
+[[package]]
+name = "glam"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "151665d9be52f9bb40fc7966565d39666f2d1e69233571b71b87791c7e0528b3"
 
 [[package]]
 name = "grid"
