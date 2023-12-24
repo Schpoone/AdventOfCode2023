@@ -165,6 +165,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "day23"
+version = "0.1.0"
+dependencies = [
+ "colored",
+ "glam 0.25.0",
+ "nom",
+ "petgraph",
+]
+
+[[package]]
 name = "day3"
 version = "0.1.0"
 dependencies = [
