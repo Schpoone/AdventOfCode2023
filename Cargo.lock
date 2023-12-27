@@ -96,8 +96,10 @@ dependencies = [
 name = "day12"
 version = "0.1.0"
 dependencies = [
+ "indicatif",
  "itertools",
  "nom",
+ "rayon",
 ]
 
 [[package]]
