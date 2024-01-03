@@ -1,12 +1,7 @@
 use core::fmt;
-use indicatif::ParallelProgressIterator;
-use itertools::{
-    chain, repeat_n,
-    FoldWhile::{Continue, Done},
-    Itertools,
-};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::{cmp::Ordering, collections::BinaryHeap, iter::zip};
+use itertools::{chain, repeat_n, Itertools};
+use memoize::memoize;
+use std::{cmp::Ordering, iter::zip};
 
 use nom::{
     branch::alt,
@@ -17,14 +12,14 @@ use nom::{
     IResult,
 };
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 enum Spring {
     Operational,
     Damaged,
     Unknown,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Hash)]
 struct Row {
     springs: Vec<Spring>,
     nums: Vec<usize>,
@@ -149,10 +144,13 @@ fn expand(row: Row) -> Row {
     }
 }
 
-/// Test if the row filled in from the left so far is possibly valid
-/// Returns the reduced row that is still unknown
-/// Should not be called with fully known Rows
-fn is_left_valid(row: Row) -> Option<Row> {
+/// Count number of valid arrangements with a dynamic programming approach
+/// Place the first block of springs on the left,
+/// if the block itself is not contradicting anything,
+/// call num_valid() again using a row without the block and without the first num
+/// do this for every possible placement of the first block and sum them
+#[memoize(SharedCache)]
+fn num_valid(row: Row) -> usize {
     // If there's not enough unknowns left to match the nums, it's invalid
     if row
         .springs
@@ -161,213 +159,58 @@ fn is_left_valid(row: Row) -> Option<Row> {
         .count()
         < row.nums.iter().sum()
     {
-        return None;
+        return 0;
     }
 
-    // If there's already too many damaged springs, it's invalid
-    if row
-        .springs
-        .iter()
-        .filter(|&&s| s == Spring::Damaged)
-        .count()
-        > row.nums.iter().sum()
-    {
-        return None;
-    }
-
-    let damaged_slices = row
-        .springs
-        .split(|&s| s == Spring::Operational)
-        .filter(|slice| !slice.is_empty())
-        .collect_vec();
-
-    let zipped_iter = zip(row.nums.iter(), damaged_slices.clone());
-    let mut unknown_idx = 0;
-    for (i, (&num, damaged_slice)) in zipped_iter.enumerate() {
-        unknown_idx = i;
-        if damaged_slice.contains(&Spring::Unknown) {
-            let known_slice = damaged_slice
-                .split(|&s| s == Spring::Unknown)
-                .next()
-                .unwrap();
-            if known_slice.len() > num {
-                return None;
+    let num = row.nums[0];
+    (0..=(row.springs.len() - num))
+        .map(|start_position| {
+            if row
+                .springs
+                .iter()
+                .take(start_position + num)
+                .enumerate()
+                .all(|(idx, &s)| {
+                    if idx < start_position {
+                        s == Spring::Operational || s == Spring::Unknown
+                    } else {
+                        s == Spring::Damaged || s == Spring::Unknown
+                    }
+                })
+            {
+                if row.nums.len() == 1 {
+                    if row.springs[start_position + num..]
+                        .iter()
+                        .all(|&s| s != Spring::Damaged)
+                    {
+                        1
+                    } else {
+                        0
+                    }
+                } else if row.springs.len() <= start_position + num + 1
+                    || row.springs[start_position + num] == Spring::Damaged
+                {
+                    0
+                } else {
+                    let new_row = Row {
+                        springs: row.springs[start_position + num + 1..].to_vec(),
+                        nums: row.nums[1..].to_vec(),
+                    };
+                    num_valid(new_row)
+                }
             } else {
-                break;
-            }
-        }
-        if num != damaged_slice.len() {
-            return None;
-        }
-    }
-
-    // This is the position of the beginning of the first slice that contains unknowns
-    let unknown_slice_start = row
-        .springs
-        .split(|&s| s == Spring::Operational)
-        .fold_while(0, |acc, slice| {
-            if slice.contains(&Spring::Unknown) {
-                Done(acc)
-            } else {
-                Continue(acc + slice.len() + 1)
+                0
             }
         })
-        .into_inner();
-
-    if unknown_idx == row.nums.len() - 1 {
-        return Some(row);
-    }
-
-    // Figure out if there's enough unknowns left to fit the damaged springs
-    let damaged_springs_needed = row.nums[unknown_idx..].iter().sum();
-    if row.springs[unknown_slice_start..]
-        .iter()
-        .filter(|&s| *s == Spring::Unknown || *s == Spring::Damaged)
-        .count()
-        < damaged_springs_needed
-    {
-        return None;
-    }
-
-    // Figure out if there's enough space left in the row to fit the damaged springs with spaces
-    let space_needed = damaged_springs_needed + row.nums[unknown_idx..].len() - 1;
-    let space_left = row.springs.len() - unknown_slice_start;
-    // if space_left >= space_needed {
-    //     dbg!(damaged_slices);
-    //     dbg!(Row {
-    //         springs: row.springs.to_vec(),
-    //         nums: row.nums.to_vec()
-    //     });
-    //     dbg!(unknown_idx);
-    //     dbg!(unknown_slice_start);
-    //     dbg!(space_needed);
-    //     dbg!(space_left);
-    // }
-    if space_left >= space_needed {
-        // return Some(row);
-        return Some(Row {
-            springs: row.springs[unknown_slice_start..].to_vec(),
-            nums: row.nums[unknown_idx..].to_vec(),
-        });
-    } else {
-        None
-    }
-}
-
-/// Given a row, fill in all springs that are guaranteed
-fn reason(row: Row) -> Row {
-    let nums_needed_space = row.nums.iter().sum::<usize>() + row.nums.len() - 1;
-    let overlapping_space = row.springs.len() - nums_needed_space;
-    let mut new_springs = Vec::new();
-    let mut idx = 0;
-    for num in row.nums.iter() {
-        if overlapping_space < *num {
-            // Some springs can be filled in
-            let space_to_fill = *num - overlapping_space;
-            for _ in 0..(*num - space_to_fill) {
-                new_springs.push(row.springs[idx]);
-                idx += 1;
-            }
-            for _ in 0..space_to_fill {
-                new_springs.push(Spring::Damaged);
-                idx += 1;
-            }
-        } else {
-            // No springs can be filled in
-            for i in 0..*num {
-                new_springs.push(row.springs[idx + i]);
-            }
-            idx += num;
-        }
-        if idx < row.springs.len() {
-            new_springs.push(row.springs[idx]);
-            idx += 1;
-        }
-    }
-    while idx < row.springs.len() {
-        new_springs.push(row.springs[idx]);
-        idx += 1;
-    }
-    Row {
-        springs: new_springs,
-        nums: row.nums,
-    }
-}
-
-/// Fill in one unknown from the given
-fn fill_left(row: &Row, spring_type: Spring) -> Row {
-    let mut springs = Vec::new();
-    let mut matched = false;
-    for spring in row.springs.iter() {
-        if matched {
-            springs.push(*spring);
-        } else {
-            springs.push(match spring {
-                Spring::Unknown => {
-                    matched = true;
-                    spring_type
-                }
-                _ => *spring,
-            })
-        }
-    }
-    Row {
-        springs,
-        nums: row.nums.clone(),
-    }
+        .sum()
 }
 
 pub fn part2(text: String) -> usize {
     text.lines()
-        .collect_vec()
-        .par_iter()
-        .progress()
         .map(|line| {
-            let mut valid_line_arrangements = 0;
-            // dbg!(line);
             let (_, row) = parse_line(line).unwrap();
             let row = expand(row);
-            let mut possibilities = BinaryHeap::with_capacity(1024);
-            // let mut printed = false;
-            // let mut invalid_line_arrangements = 0;
-            possibilities.push(reason(row));
-            while !possibilities.is_empty() {
-                let possibility = possibilities.pop().unwrap();
-                let new_possibility = fill_left(&possibility, Spring::Operational);
-                if new_possibility.springs.contains(&Spring::Unknown) {
-                    if let Some(new_possibility) = is_left_valid(new_possibility) {
-                        possibilities.push(new_possibility);
-                    // } else {
-                        // invalid_line_arrangements += 1;
-                    }
-                } else {
-                    if is_valid(&new_possibility.springs, &new_possibility.nums) {
-                        valid_line_arrangements += 1;
-                    // } else {
-                    //     invalid_line_arrangements += 1;
-                    }
-                }
-                let new_possibility = fill_left(&possibility, Spring::Damaged);
-                if new_possibility.springs.contains(&Spring::Unknown) {
-                    if let Some(new_possibility) = is_left_valid(new_possibility) {
-                        possibilities.push(new_possibility);
-                    // } else {
-                    //     invalid_line_arrangements += 1;
-                    }
-                } else {
-                    if is_valid(&new_possibility.springs, &new_possibility.nums) {
-                        valid_line_arrangements += 1;
-                    // } else {
-                    //     invalid_line_arrangements += 1;
-                    }
-                }
-                // if valid_line_arrangements + invalid_line_arrangements % 100000 == 0 {
-                //     dbg!(valid_line_arrangements + invalid_line_arrangements);
-                //     dbg!(possibilities.peek().unwrap());
-                // }
-            }
-            // dbg!(valid_line_arrangements);
-            valid_line_arrangements
+            num_valid(row)
         })
         .sum()
 }
