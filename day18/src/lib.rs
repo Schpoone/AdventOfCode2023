@@ -185,7 +185,14 @@ pub fn part1(text: String) -> usize {
     count_interior(&grid)
 }
 
-fn get_grid_by_color(text: &str) -> IResult<&str, Grid> {
+enum Direction {
+    North,
+    South,
+    East,
+    West,
+}
+
+fn get_grid_by_color(text: &str) -> IResult<&str, Vec<(Direction, i64)>> {
     map(
         separated_list1(
             line_ending::<&str, Error<_>>,
@@ -198,79 +205,51 @@ fn get_grid_by_color(text: &str) -> IResult<&str, Grid> {
             )),
         ),
         |lines| {
-            let mut blocks = HashMap::new();
-            let mut cur = I64Vec2::new(0, 0);
+            let mut segments = Vec::new();
             for (_, _, _, _, color) in lines {
                 let len = i64::from_str_radix(&color[..5], 16).unwrap();
                 let dir = i64::from_str_radix(&color[5..], 16).unwrap();
-                dbg!(dir);
-                dbg!(len);
-                for _ in 0..len {
+                segments.push((
                     match dir {
-                        3 => {
-                            cur -= I64Vec2::new(0, 1);
-                            blocks.insert(
-                                cur,
-                                Hole {
-                                    color: color.to_string(),
-                                },
-                            );
-                        }
-                        1 => {
-                            cur += I64Vec2::new(0, 1);
-                            blocks.insert(
-                                cur,
-                                Hole {
-                                    color: color.to_string(),
-                                },
-                            );
-                        }
-                        2 => {
-                            cur -= I64Vec2::new(1, 0);
-                            blocks.insert(
-                                cur,
-                                Hole {
-                                    color: color.to_string(),
-                                },
-                            );
-                        }
-                        0 => {
-                            cur += I64Vec2::new(1, 0);
-                            blocks.insert(
-                                cur,
-                                Hole {
-                                    color: color.to_string(),
-                                },
-                            );
-                        }
+                        3 => Direction::North,
+                        1 => Direction::South,
+                        0 => Direction::East,
+                        2 => Direction::West,
                         _ => panic!("Invalid direction"),
-                    }
-                }
+                    },
+                    len,
+                ));
             }
-            let bounds = blocks.iter().fold(
-                (I64Vec2::new(0, 0), I64Vec2::new(0, 0)),
-                |(acc_min, acc_max), (loc, _)| {
-                    let x = acc_min.x.min(loc.x);
-                    let y = acc_min.y.min(loc.y);
-                    let min = I64Vec2::new(x, y);
-                    let x = acc_max.x.max(loc.x);
-                    let y = acc_max.y.max(loc.y);
-                    let max = I64Vec2::new(x, y);
-                    (min, max)
-                },
-            );
-            Grid {
-                min: bounds.0,
-                max: bounds.1 + I64Vec2::new(1, 1),
-                blocks,
-            }
+            segments
         },
     )(text)
 }
 
-pub fn part2(text: String) -> usize {
+/// Calculate the interior of a polygon using the Triangle Form of the Shoelace Formula
+/// This version counts the boundary as part of the interior
+/// Note: if boundary is not in the interior, subtract len rather than add it, still +1 at the end
+fn shoelace(segments: &[(Direction, i64)]) -> i64 {
+    segments
+        .iter()
+        .fold((I64Vec2::new(0, 0), 0), |(cur, area), (dir, len)| {
+            let v1 = cur;
+            let v2 = cur
+                + match dir {
+                    Direction::North => I64Vec2::new(0, -*len),
+                    Direction::South => I64Vec2::new(0, *len),
+                    Direction::East => I64Vec2::new(*len, 0),
+                    Direction::West => I64Vec2::new(-*len, 0),
+                };
+            dbg!(v1);
+            dbg!(v2);
+            (v2, area + v1.x * v2.y - v2.x * v1.y + len)
+        })
+        .1
+        / 2
+        + 1
+}
+
+pub fn part2(text: String) -> i64 {
     let (_, grid) = get_grid_by_color(text.as_str()).unwrap();
-    dbg!(grid.min);
-    dbg!(grid.max);
-    count_interior(&grid)
+    shoelace(&grid)
 }

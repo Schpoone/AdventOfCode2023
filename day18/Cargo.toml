@@ -8,4 +8,3 @@ edition = "2021"
 [dependencies]
 nom = "7.1"
 glam = "0.24.2"
-grid = "0.12.0"
